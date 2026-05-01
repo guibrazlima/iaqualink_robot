@@ -69,7 +69,6 @@
       "ebox_motor_block_sn": { "name": "Motor Block Serial" },
       "ebox_control_box_pn": { "name": "Control Box Part No." },
       "ebox_cleaner_pn": { "name": "Cleaner Part No." },
-      "ebox_firmware": { "name": "Ebox Firmware" },
       "robot_firmware": { "name": "Robot Firmware" },
       "duration_water": { "name": "Duration: Waterline" },
       "duration_quick": { "name": "Duration: Quick" },

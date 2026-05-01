@@ -69,7 +69,6 @@
       "ebox_motor_block_sn": { "name": "Nº Série Bloco Motor" },
       "ebox_control_box_pn": { "name": "Ref. Caixa de Controlo" },
       "ebox_cleaner_pn": { "name": "Ref. Robô Completo" },
-      "ebox_firmware": { "name": "Firmware Ebox" },
       "robot_firmware": { "name": "Firmware Robô" },
       "duration_water": { "name": "Duração: Linha de Água" },
       "duration_quick": { "name": "Duração: Rápido" },

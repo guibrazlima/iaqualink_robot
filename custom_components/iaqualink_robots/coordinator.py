@@ -48,10 +48,13 @@ class AqualinkClient:
             "Accept": "*/*"
         }
         self._debug_mode = debug_mode  # Debug mode configurable
-        # Persistent websocket connection for commands and status updates
+        # Persistent websocket connection for commands and status updates (polling)
         self._ws_connection = None
         self._ws_session = None
         self._last_ws_activity = None
+        # Separate websocket connection for the listener (telemetry stream)
+        self._listener_ws_connection = None
+        self._listener_ws_session = None
         self._coordinator_callback = None  # Callback to notify coordinator of real-time updates
         # Websocket connection failure tracking (not device offline status)
         # Device being 'offline' via working websocket is normal, not a failure
@@ -534,16 +537,56 @@ class AqualinkClient:
                 
         self._last_ws_activity = None
 
+    async def _close_listener_websocket(self):
+        """Close the listener's dedicated websocket connection and session."""
+        if self._listener_ws_connection:
+            try:
+                if not self._listener_ws_connection.closed:
+                    await self._listener_ws_connection.close()
+            except Exception as e:
+                _LOGGER.debug(f"Error closing listener websocket connection: {e}")
+            finally:
+                self._listener_ws_connection = None
+
+        if self._listener_ws_session:
+            try:
+                if not self._listener_ws_session.closed:
+                    await self._listener_ws_session.close()
+            except Exception as e:
+                _LOGGER.debug(f"Error closing listener websocket session: {e}")
+            finally:
+                self._listener_ws_session = None
+
     async def _websocket_listener(self):
-        """Listen for real-time websocket updates and notify coordinator of changes."""
+        """Listen for real-time websocket updates and notify coordinator of changes.
+        
+        Uses a SEPARATE websocket connection from the polling connection to avoid
+        race conditions where both the listener and get_device_status() compete
+        to read from the same connection.
+        """
         message_count = 0
         
         try:
-            # Ensure websocket connection is established
-            await self._ensure_websocket_connection()
+            # Create a dedicated websocket connection for the listener
+            await self._close_listener_websocket()  # Clean up any existing
             
-            if not self._ws_connection or self._ws_connection.closed:
-                _LOGGER.warning("Cannot start websocket listener - no connection available")
+            timeout = aiohttp.ClientTimeout(total=30)
+            self._listener_ws_session = aiohttp.ClientSession(timeout=timeout)
+            
+            ws_headers = {
+                "Authorization": self._id_token,
+                "Accept": "*/*"
+            }
+            
+            self._listener_ws_connection = await self._listener_ws_session.ws_connect(
+                URL_WS,
+                headers=ws_headers
+            )
+            
+            _LOGGER.debug(f"Listener: established dedicated websocket connection for robot {self._serial}")
+            
+            if not self._listener_ws_connection or self._listener_ws_connection.closed:
+                _LOGGER.warning("Cannot start websocket listener - dedicated connection failed")
                 return
             
             # Send initial subscription request to start receiving updates
@@ -556,11 +599,11 @@ class AqualinkClient:
                 "version": 1
             }
             
-            await self._ws_connection.send_json(subscribe_req)
-            _LOGGER.debug(f"Started websocket listener for robot {self._serial}")
+            await self._listener_ws_connection.send_json(subscribe_req)
+            _LOGGER.debug(f"Listener: subscribed for robot {self._serial}")
             
-            # Listen for incoming messages
-            async for message in self._ws_connection:
+            # Listen for incoming messages on the DEDICATED connection
+            async for message in self._listener_ws_connection:
                 if message.type == aiohttp.WSMsgType.TEXT:
                     message_count += 1
                     try:
@@ -603,6 +646,14 @@ class AqualinkClient:
                                         asyncio.create_task(self._coordinator_callback())
                                     except Exception as e:
                                         _LOGGER.debug(f"Error calling coordinator callback: {e}")
+                            
+                            # Cache schedule data from the shadow (arrives on subscribe response)
+                            schedule = robot_data.get('schedule')
+                            if schedule and isinstance(schedule, dict):
+                                if not hasattr(self, '_schedule_cache'):
+                                    self._schedule_cache = {}
+                                self._schedule_cache = schedule
+                                _LOGGER.debug(f"📅 Schedule data cached from listener: {list(schedule.keys())}")
                         
                         # === CAPTURE REAL-TIME TELEMETRY DATA ===
                         # Telemetry arrives in a 'data' array within certain WS messages
@@ -711,6 +762,7 @@ class AqualinkClient:
             _LOGGER.warning(f"Websocket listener error: {e}")
         finally:
             _LOGGER.debug(f"Websocket listener stopped after {message_count} messages")
+            await self._close_listener_websocket()
 
     def set_coordinator_callback(self, callback):
         """Set the callback function to notify coordinator of real-time updates."""
@@ -1189,7 +1241,6 @@ class AqualinkClient:
             result["ebox_motor_block_sn"] = ebox.get('motorBlockSn', 'unknown')
             result["ebox_control_box_pn"] = ebox.get('controlBoxPn', 'unknown')
             result["ebox_cleaner_pn"] = ebox.get('completeCleanerPn', 'unknown')
-            result["ebox_firmware"] = ebox.get('vr', 'unknown')
         except (KeyError, TypeError):
             pass
 
@@ -1281,13 +1332,19 @@ class AqualinkClient:
         # === WEEKLY SCHEDULE ===
         try:
             schedule = robot_data.get('schedule', {})
+            # If schedule not in polling response, try the listener's cached schedule
+            if not schedule and hasattr(self, '_schedule_cache') and self._schedule_cache:
+                schedule = self._schedule_cache
+                _LOGGER.debug("Using cached schedule data from listener")
+            
+            days_of_week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+            cycle_names = {0: "Wall only", 1: "Floor only", 2: "SMART", 3: "Floor+Walls"}
+            
             if schedule:
                 enables = schedule.get('Enable', [0]*7)
                 programs = schedule.get('Prt', [0]*7)
                 hours = schedule.get('Hour', [0]*7)
                 minutes = schedule.get('Min', [0]*7)
-                days_of_week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-                cycle_names = {0: "Wall only", 1: "Floor only", 2: "SMART", 3: "Floor+Walls"}
                 for i, day in enumerate(days_of_week):
                     if i < len(enables):
                         result[f"schedule_{day}_enabled"] = "On" if enables[i] else "Off"
@@ -1295,6 +1352,13 @@ class AqualinkClient:
                         h = hours[i] if i < len(hours) else 0
                         m = minutes[i] if i < len(minutes) else 0
                         result[f"schedule_{day}_time"] = f"{h:02d}:{m:02d}"
+            else:
+                # No schedule configured on robot - set sensible defaults
+                _LOGGER.debug("No schedule data available - setting defaults")
+                for day in days_of_week:
+                    result[f"schedule_{day}_enabled"] = "Off"
+                    result[f"schedule_{day}_program"] = "None"
+                    result[f"schedule_{day}_time"] = "--:--"
         except (KeyError, TypeError) as e:
             _LOGGER.debug(f"Error parsing schedule: {e}")
 

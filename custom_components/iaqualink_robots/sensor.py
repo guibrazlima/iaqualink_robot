@@ -36,7 +36,6 @@ ICON_MAP = {
     "ebox_motor_block_sn": "mdi:engine",
     "ebox_control_box_pn": "mdi:barcode-scan",
     "ebox_cleaner_pn":     "mdi:barcode-scan",
-    "ebox_firmware":       "mdi:update",
     "robot_firmware":      "mdi:update",
     # === CYCLE DURATIONS ===
     "duration_water":      "mdi:waves",
@@ -243,7 +242,6 @@ ALL_SENSOR_TYPES = [
     ("ebox_motor_block_sn", "Motor Block Serial"),
     ("ebox_control_box_pn", "Control Box Part No."),
     ("ebox_cleaner_pn",     "Cleaner Part No."),
-    ("ebox_firmware",       "Ebox Firmware"),
     ("robot_firmware",      "Robot Firmware"),
     # --- Cycle Durations (configured timers) ---
     ("duration_water",      "Duration: Waterline"),
@@ -322,7 +320,7 @@ ALL_SENSOR_TYPES = [
 VR_ONLY_SENSORS = {
     "ebox_control_box_sn", "ebox_cleaner_sn", "ebox_power_supply_sn",
     "ebox_sensor_block_sn", "ebox_motor_block_sn", "ebox_control_box_pn",
-    "ebox_cleaner_pn", "ebox_firmware", "robot_firmware",
+    "ebox_cleaner_pn", "robot_firmware",
     "duration_water", "duration_quick", "duration_smart",
     "duration_deep", "duration_custom", "duration_first_smart",
     "schedule_mon_enabled", "schedule_mon_program", "schedule_mon_time",
