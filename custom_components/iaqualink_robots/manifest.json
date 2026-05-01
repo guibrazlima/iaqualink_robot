@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/guibrazlima/iaqualink_robot/issues/",
   "requirements": ["aiohttp>=3.9.0"],
   "homeassistant": "2025.1.0",
-  "version": "3.2.0"
+  "version": "3.3.0"
 }

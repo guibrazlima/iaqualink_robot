@@ -63,8 +63,6 @@ class AqualinkClient:
         self._max_ws_failures_before_offline = 5  # Allow 5 websocket connection failures before marking offline
         # Simple instance ID for logging purposes
         self._instance_id = f"ha-{hash(username + str(id(self))) % 10000:04d}"
-        # Telemetry cache for real-time sensor data from WebSocket
-        self._telemetry_cache = {}
         
         # Status stabilization to prevent rapid connection status changes
         self._status_history = []  # Track recent status values
@@ -633,34 +631,13 @@ class AqualinkClient:
                         import json
                         robot_keys = list(robot_data.keys()) if isinstance(robot_data, dict) else []
                         reported_keys = list(reported.keys()) if isinstance(reported, dict) else []
-                        _LOGGER.warning(f"Listener: shadow reported_keys={reported_keys}")
-                        _LOGGER.warning(f"Listener: shadow robot_keys={robot_keys}")
-                        
-                        # Log the actual telemetry fields from the shadow
-                        sensors_data = robot_data.get('sensors')
-                        if sensors_data:
-                            _LOGGER.warning(f"Listener: SENSORS type={type(sensors_data).__name__}, content={json.dumps(sensors_data, default=str)[:2000]}")
-                        else:
-                            _LOGGER.warning(f"Listener: sensors=None/missing")
-                        
-                        diagnostic_data = robot_data.get('diagnostic')
-                        if diagnostic_data:
-                            _LOGGER.warning(f"Listener: DIAGNOSTIC type={type(diagnostic_data).__name__}, content={json.dumps(diagnostic_data, default=str)[:2000]}")
-                        else:
-                            _LOGGER.warning(f"Listener: diagnostic=None/missing")
-                        
-                        durations_data = robot_data.get('durations')
-                        if durations_data:
-                            _LOGGER.warning(f"Listener: DURATIONS={json.dumps(durations_data, default=str)[:500]}")
-                        
-                        tmp_data = robot_data.get('tmp')
-                        _LOGGER.warning(f"Listener: tmp={tmp_data}, totalHours={robot_data.get('totalHours')}, stepper={robot_data.get('stepper')}, errorState={robot_data.get('errorState')}, errorCode={robot_data.get('errorCode')}")
+                        _LOGGER.debug(f"Listener: shadow reported_keys={reported_keys}, robot_keys={robot_keys}")
                         
                         # Cache schedule if present
                         schedule = robot_data.get('schedule')
                         if schedule and isinstance(schedule, dict):
                             self._schedule_cache = schedule
-                            _LOGGER.warning(f"Listener: cached schedule from shadow")
+                            _LOGGER.debug(f"Listener: cached schedule from shadow")
                         
                         message_count += 1
                         total_message_count += 1
@@ -681,10 +658,6 @@ class AqualinkClient:
                         total_message_count += 1
                         try:
                             data = message.json()
-                            
-                            # Log first 5 messages at WARNING for diagnostics
-                            if message_count <= 5:
-                                _LOGGER.warning(f"Listener msg #{message_count}: service={data.get('service')}, event={data.get('event')}, keys={list(data.keys())[:8]}")
                             
                             # Log first few messages and then periodically
                             if message_count <= 3 or message_count % 50 == 0:
@@ -738,95 +711,10 @@ class AqualinkClient:
                                     self._schedule_cache = schedule
                                     _LOGGER.debug(f"Schedule data cached from listener: {list(schedule.keys())}")
                             
-                            # === CAPTURE REAL-TIME TELEMETRY DATA ===
-                            # Telemetry arrives in a 'data' array within certain WS messages
-                            telemetry_array = data.get("data")
-                            if telemetry_array and isinstance(telemetry_array, list) and len(telemetry_array) > 0:
-                                telem = telemetry_array[-1]  # Use latest sample
-                                if isinstance(telem, dict):
-                                    if not hasattr(self, '_telemetry_cache'):
-                                        self._telemetry_cache = {}
-                                    # Voltages
-                                    if 'vEbox' in telem:
-                                        self._telemetry_cache["telem_voltage_ebox"] = telem.get('vEbox')
-                                    if 'vRobot' in telem:
-                                        self._telemetry_cache["telem_voltage_robot"] = telem.get('vRobot')
-                                    if 'vSensor' in telem:
-                                        self._telemetry_cache["telem_voltage_sensor"] = telem.get('vSensor')
-                                    # Currents
-                                    if 'iPump' in telem:
-                                        self._telemetry_cache["telem_current_pump"] = telem.get('iPump')
-                                    if 'iTract1' in telem:
-                                        self._telemetry_cache["telem_current_track1"] = telem.get('iTract1')
-                                    if 'iTract2' in telem:
-                                        self._telemetry_cache["telem_current_track2"] = telem.get('iTract2')
-                                    # PWM
-                                    if 'pwmPump' in telem:
-                                        self._telemetry_cache["telem_pwm_pump"] = telem.get('pwmPump')
-                                    if 'pwmTract1' in telem:
-                                        self._telemetry_cache["telem_pwm_track1"] = telem.get('pwmTract1')
-                                    if 'pwmTract2' in telem:
-                                        self._telemetry_cache["telem_pwm_track2"] = telem.get('pwmTract2')
-                                    # Environmental
-                                    if 'pressure' in telem:
-                                        self._telemetry_cache["telem_pressure"] = telem.get('pressure')
-                                    if 'temperature' in telem:
-                                        self._telemetry_cache["telem_temperature"] = telem.get('temperature')
-                                    # IMU - Gyroscope
-                                    gyro = telem.get('gyro')
-                                    if gyro and isinstance(gyro, list) and len(gyro) >= 3:
-                                        self._telemetry_cache["telem_gyro_x"] = gyro[0]
-                                        self._telemetry_cache["telem_gyro_y"] = gyro[1]
-                                        self._telemetry_cache["telem_gyro_z"] = gyro[2]
-                                    # IMU - Accelerometer
-                                    accel = telem.get('accelero')
-                                    if accel and isinstance(accel, list) and len(accel) >= 3:
-                                        self._telemetry_cache["telem_accel_x"] = accel[0]
-                                        self._telemetry_cache["telem_accel_y"] = accel[1]
-                                        self._telemetry_cache["telem_accel_z"] = accel[2]
-                                    # IMU - Magnetometer
-                                    mag = telem.get('magneto')
-                                    if mag and isinstance(mag, list) and len(mag) >= 3:
-                                        self._telemetry_cache["telem_magneto_x"] = mag[0]
-                                        self._telemetry_cache["telem_magneto_y"] = mag[1]
-                                        self._telemetry_cache["telem_magneto_z"] = mag[2]
-                                    # Navigation / Movement
-                                    if 'angleRotation' in telem:
-                                        self._telemetry_cache["telem_angle_rotation"] = telem.get('angleRotation')
-                                    if 'cumulAngleRotation' in telem:
-                                        self._telemetry_cache["telem_cumul_angle_rotation"] = telem.get('cumulAngleRotation')
-                                    if 'cumulAngleCompass' in telem:
-                                        self._telemetry_cache["telem_cumul_angle_compass"] = telem.get('cumulAngleCompass')
-                                    if 'cleanerPos' in telem:
-                                        self._telemetry_cache["telem_cleaner_position"] = telem.get('cleanerPos')
-                                    if 'movementId' in telem:
-                                        self._telemetry_cache["telem_movement_id"] = telem.get('movementId')
-                                    if 'lastMoveLength' in telem:
-                                        self._telemetry_cache["telem_last_move_length"] = telem.get('lastMoveLength')
-                                    # Counters
-                                    if 'loopCnt' in telem:
-                                        self._telemetry_cache["telem_loop_count"] = telem.get('loopCnt')
-                                    if 'tiltCnt' in telem:
-                                        self._telemetry_cache["telem_tilt_count"] = telem.get('tiltCnt')
-                                    if 'wallCnt' in telem:
-                                        self._telemetry_cache["telem_wall_count"] = telem.get('wallCnt')
-                                    if 'stairsCnt' in telem:
-                                        self._telemetry_cache["telem_stairs_count"] = telem.get('stairsCnt')
-                                    if 'floorBlockageCnt' in telem:
-                                        self._telemetry_cache["telem_floor_blockage_count"] = telem.get('floorBlockageCnt')
-                                    if 'patternId' in telem:
-                                        self._telemetry_cache["telem_pattern_id"] = telem.get('patternId')
-                                    if 'cycleId' in telem:
-                                        self._telemetry_cache["telem_cycle_id"] = telem.get('cycleId')
-                                    
-                                    _LOGGER.debug(f"Telemetry captured: {len(self._telemetry_cache)} fields")
-                                    
-                                    # Trigger coordinator update
-                                    if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
-                                        try:
-                                            asyncio.create_task(self._coordinator_callback())
-                                        except Exception as e:
-                                            _LOGGER.debug(f"Error calling coordinator callback for telemetry: {e}")
+                            # === TELEMETRY DATA ===
+                            # The shadow does not contain a 'data' array with real-time telemetry.
+                            # Sensor data is in equipment.robot.sensors (temperature, pressure, compass)
+                            # and durations, stepper, etc. — all processed during polling.
                             
                         except Exception as e:
                             _LOGGER.debug(f"Error processing websocket message: {e}")
@@ -1349,6 +1237,29 @@ class AqualinkClient:
             except Exception:
                 result["temperature"] = '0'
 
+        # === PRESSURE & COMPASS SENSOR STATES ===
+        try:
+            sensors = robot_data.get('sensors', {})
+            sns_2 = sensors.get('sns_2', {})
+            result["pressure_sensor_state"] = sns_2.get('state', 0)
+            sns_3 = sensors.get('sns_3', {})
+            result["compass_sensor_state"] = sns_3.get('state', 0)
+        except (KeyError, TypeError):
+            result["pressure_sensor_state"] = 0
+            result["compass_sensor_state"] = 0
+
+        # === ERROR CODE (separate from errorState) ===
+        try:
+            result["error_code"] = robot_data.get('errorCode', 0)
+        except (KeyError, TypeError):
+            result["error_code"] = 0
+
+        # === MOTOR/INTERNAL TEMPERATURE (tmp) ===
+        try:
+            result["internal_temp"] = robot_data.get('tmp', 0)
+        except (KeyError, TypeError):
+            result["internal_temp"] = 0
+
         # === ACTIVITY STATE ===
         try:
             robot_state = robot_data['state']
@@ -1471,9 +1382,7 @@ class AqualinkClient:
             result["time_remaining"] = 0
             result["time_remaining_human"] = self._format_time_human(0, 0, 0)
 
-        # === MERGE CACHED TELEMETRY DATA (from real-time WebSocket) ===
-        if hasattr(self, '_telemetry_cache') and self._telemetry_cache:
-            result.update(self._telemetry_cache)
+        # (Telemetry cache removed — all sensor data comes from shadow directly)
 
     def _update_cyclobat_robot_data(self, data, result):
         """Update status for cyclobat type robot."""

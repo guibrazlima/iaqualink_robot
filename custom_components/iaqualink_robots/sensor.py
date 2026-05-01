@@ -66,48 +66,11 @@ ICON_MAP = {
     "schedule_sun_enabled":"mdi:calendar-check",
     "schedule_sun_program":"mdi:playlist-play",
     "schedule_sun_time":   "mdi:clock-outline",
-    # === TELEMETRY: VOLTAGES ===
-    "telem_voltage_ebox":  "mdi:flash",
-    "telem_voltage_robot": "mdi:flash",
-    "telem_voltage_sensor":"mdi:flash",
-    # === TELEMETRY: CURRENTS ===
-    "telem_current_pump":  "mdi:current-ac",
-    "telem_current_track1":"mdi:current-ac",
-    "telem_current_track2":"mdi:current-ac",
-    # === TELEMETRY: PWM ===
-    "telem_pwm_pump":      "mdi:sine-wave",
-    "telem_pwm_track1":    "mdi:sine-wave",
-    "telem_pwm_track2":    "mdi:sine-wave",
-    # === TELEMETRY: ENVIRONMENTAL ===
-    "telem_pressure":      "mdi:gauge",
-    "telem_temperature":   "mdi:thermometer-water",
-    # === TELEMETRY: IMU GYROSCOPE ===
-    "telem_gyro_x":        "mdi:axis-x-rotate-clockwise",
-    "telem_gyro_y":        "mdi:axis-y-rotate-clockwise",
-    "telem_gyro_z":        "mdi:axis-z-rotate-clockwise",
-    # === TELEMETRY: IMU ACCELEROMETER ===
-    "telem_accel_x":       "mdi:axis-x-arrow",
-    "telem_accel_y":       "mdi:axis-y-arrow",
-    "telem_accel_z":       "mdi:axis-z-arrow",
-    # === TELEMETRY: MAGNETOMETER ===
-    "telem_magneto_x":     "mdi:magnet",
-    "telem_magneto_y":     "mdi:magnet",
-    "telem_magneto_z":     "mdi:magnet",
-    # === TELEMETRY: NAVIGATION ===
-    "telem_angle_rotation":       "mdi:rotate-right",
-    "telem_cumul_angle_rotation": "mdi:rotate-360",
-    "telem_cumul_angle_compass":  "mdi:compass",
-    "telem_cleaner_position":     "mdi:map-marker",
-    "telem_movement_id":          "mdi:run",
-    "telem_last_move_length":     "mdi:ruler",
-    # === TELEMETRY: COUNTERS ===
-    "telem_loop_count":           "mdi:counter",
-    "telem_tilt_count":           "mdi:angle-acute",
-    "telem_wall_count":           "mdi:wall",
-    "telem_stairs_count":         "mdi:stairs-up",
-    "telem_floor_blockage_count": "mdi:alert-octagon",
-    "telem_pattern_id":           "mdi:shape",
-    "telem_cycle_id":             "mdi:numeric",
+    # === HARDWARE SENSORS (from shadow) ===
+    "pressure_sensor_state":"mdi:gauge",
+    "compass_sensor_state": "mdi:compass",
+    "error_code":           "mdi:alert-circle-outline",
+    "internal_temp":        "mdi:thermometer-alert",
 }
 
 # Unit of measurement map
@@ -130,83 +93,21 @@ UNIT_MAP = {
     "duration_deep":       "min",
     "duration_custom":     "min",
     "duration_first_smart":"min",
-    # Telemetry voltages
-    "telem_voltage_ebox":  "V",
-    "telem_voltage_robot": "V",
-    "telem_voltage_sensor":"V",
-    # Telemetry currents
-    "telem_current_pump":  "A",
-    "telem_current_track1":"A",
-    "telem_current_track2":"A",
-    # Telemetry PWM
-    "telem_pwm_pump":      "%",
-    "telem_pwm_track1":    "%",
-    "telem_pwm_track2":    "%",
-    # Telemetry environmental
-    "telem_pressure":      "hPa",
-    "telem_temperature":   "°C",
-    # Telemetry IMU (gyro = °/s, accel = m/s², magneto = µT)
-    "telem_gyro_x":        "°/s",
-    "telem_gyro_y":        "°/s",
-    "telem_gyro_z":        "°/s",
-    "telem_accel_x":       "m/s²",
-    "telem_accel_y":       "m/s²",
-    "telem_accel_z":       "m/s²",
-    "telem_magneto_x":     "µT",
-    "telem_magneto_y":     "µT",
-    "telem_magneto_z":     "µT",
-    # Telemetry navigation
-    "telem_angle_rotation":       "°",
-    "telem_cumul_angle_rotation": "°",
-    "telem_cumul_angle_compass":  "°",
-    "telem_last_move_length":     "m",
+    # Hardware sensors
+    "internal_temp":       "°C",
 }
 
 # Device class map for HA native device classes
 DEVICE_CLASS_MAP = {
     "temperature":         SensorDeviceClass.TEMPERATURE,
-    "telem_temperature":   SensorDeviceClass.TEMPERATURE,
-    "telem_voltage_ebox":  SensorDeviceClass.VOLTAGE,
-    "telem_voltage_robot": SensorDeviceClass.VOLTAGE,
-    "telem_voltage_sensor":SensorDeviceClass.VOLTAGE,
-    "telem_current_pump":  SensorDeviceClass.CURRENT,
-    "telem_current_track1":SensorDeviceClass.CURRENT,
-    "telem_current_track2":SensorDeviceClass.CURRENT,
-    "telem_pressure":      SensorDeviceClass.PRESSURE,
+    "internal_temp":       SensorDeviceClass.TEMPERATURE,
 }
 
 # State class for entities that track numeric measurement values
 STATE_CLASS_MAP = {
     "total_hours":         SensorStateClass.TOTAL_INCREASING,
-    "telem_voltage_ebox":  SensorStateClass.MEASUREMENT,
-    "telem_voltage_robot": SensorStateClass.MEASUREMENT,
-    "telem_voltage_sensor":SensorStateClass.MEASUREMENT,
-    "telem_current_pump":  SensorStateClass.MEASUREMENT,
-    "telem_current_track1":SensorStateClass.MEASUREMENT,
-    "telem_current_track2":SensorStateClass.MEASUREMENT,
-    "telem_pwm_pump":      SensorStateClass.MEASUREMENT,
-    "telem_pwm_track1":    SensorStateClass.MEASUREMENT,
-    "telem_pwm_track2":    SensorStateClass.MEASUREMENT,
-    "telem_pressure":      SensorStateClass.MEASUREMENT,
-    "telem_temperature":   SensorStateClass.MEASUREMENT,
-    "telem_gyro_x":        SensorStateClass.MEASUREMENT,
-    "telem_gyro_y":        SensorStateClass.MEASUREMENT,
-    "telem_gyro_z":        SensorStateClass.MEASUREMENT,
-    "telem_accel_x":       SensorStateClass.MEASUREMENT,
-    "telem_accel_y":       SensorStateClass.MEASUREMENT,
-    "telem_accel_z":       SensorStateClass.MEASUREMENT,
-    "telem_magneto_x":     SensorStateClass.MEASUREMENT,
-    "telem_magneto_y":     SensorStateClass.MEASUREMENT,
-    "telem_magneto_z":     SensorStateClass.MEASUREMENT,
-    "telem_angle_rotation":       SensorStateClass.MEASUREMENT,
-    "telem_cumul_angle_rotation": SensorStateClass.TOTAL_INCREASING,
-    "telem_cumul_angle_compass":  SensorStateClass.TOTAL_INCREASING,
-    "telem_loop_count":    SensorStateClass.TOTAL_INCREASING,
-    "telem_tilt_count":    SensorStateClass.TOTAL_INCREASING,
-    "telem_wall_count":    SensorStateClass.TOTAL_INCREASING,
-    "telem_stairs_count":  SensorStateClass.TOTAL_INCREASING,
-    "telem_floor_blockage_count": SensorStateClass.TOTAL_INCREASING,
     "temperature":         SensorStateClass.MEASUREMENT,
+    "internal_temp":       SensorStateClass.MEASUREMENT,
 }
 
 # All possible sensors — grouped by category
@@ -272,51 +173,14 @@ ALL_SENSOR_TYPES = [
     ("schedule_sun_enabled","Schedule Sun Enabled"),
     ("schedule_sun_program","Schedule Sun Program"),
     ("schedule_sun_time",   "Schedule Sun Time"),
-    # --- Real-time Telemetry: Voltages ---
-    ("telem_voltage_ebox",  "Voltage: Ebox"),
-    ("telem_voltage_robot", "Voltage: Robot"),
-    ("telem_voltage_sensor","Voltage: Sensor"),
-    # --- Real-time Telemetry: Motor Currents ---
-    ("telem_current_pump",  "Current: Pump"),
-    ("telem_current_track1","Current: Track 1"),
-    ("telem_current_track2","Current: Track 2"),
-    # --- Real-time Telemetry: PWM ---
-    ("telem_pwm_pump",      "PWM: Pump"),
-    ("telem_pwm_track1",    "PWM: Track 1"),
-    ("telem_pwm_track2",    "PWM: Track 2"),
-    # --- Real-time Telemetry: Environmental ---
-    ("telem_pressure",      "Pressure"),
-    ("telem_temperature",   "Water Temperature (Live)"),
-    # --- Real-time Telemetry: Gyroscope ---
-    ("telem_gyro_x",        "Gyroscope X"),
-    ("telem_gyro_y",        "Gyroscope Y"),
-    ("telem_gyro_z",        "Gyroscope Z"),
-    # --- Real-time Telemetry: Accelerometer ---
-    ("telem_accel_x",       "Accelerometer X"),
-    ("telem_accel_y",       "Accelerometer Y"),
-    ("telem_accel_z",       "Accelerometer Z"),
-    # --- Real-time Telemetry: Magnetometer ---
-    ("telem_magneto_x",     "Magnetometer X"),
-    ("telem_magneto_y",     "Magnetometer Y"),
-    ("telem_magneto_z",     "Magnetometer Z"),
-    # --- Real-time Telemetry: Navigation ---
-    ("telem_angle_rotation",       "Angle Rotation"),
-    ("telem_cumul_angle_rotation", "Cumulative Angle Rotation"),
-    ("telem_cumul_angle_compass",  "Cumulative Compass Angle"),
-    ("telem_cleaner_position",     "Cleaner Position"),
-    ("telem_movement_id",          "Movement ID"),
-    ("telem_last_move_length",     "Last Move Length"),
-    # --- Real-time Telemetry: Counters ---
-    ("telem_loop_count",           "Loop Count"),
-    ("telem_tilt_count",           "Tilt Count"),
-    ("telem_wall_count",           "Wall Contact Count"),
-    ("telem_stairs_count",         "Stairs Count"),
-    ("telem_floor_blockage_count", "Floor Blockage Count"),
-    ("telem_pattern_id",           "Pattern ID"),
-    ("telem_cycle_id",             "Cycle ID"),
+    # --- Hardware Sensors (from device shadow) ---
+    ("pressure_sensor_state","Pressure Sensor"),
+    ("compass_sensor_state", "Compass Sensor"),
+    ("error_code",           "Error Code"),
+    ("internal_temp",        "Internal Temperature"),
 ]
 
-# Sensors only available for VR/Vortrax robots (WebSocket telemetry)
+# Sensors only available for VR/Vortrax robots
 VR_ONLY_SENSORS = {
     "ebox_control_box_sn", "ebox_cleaner_sn", "ebox_power_supply_sn",
     "ebox_sensor_block_sn", "ebox_motor_block_sn", "ebox_control_box_pn",
@@ -330,19 +194,8 @@ VR_ONLY_SENSORS = {
     "schedule_fri_enabled", "schedule_fri_program", "schedule_fri_time",
     "schedule_sat_enabled", "schedule_sat_program", "schedule_sat_time",
     "schedule_sun_enabled", "schedule_sun_program", "schedule_sun_time",
-    "telem_voltage_ebox", "telem_voltage_robot", "telem_voltage_sensor",
-    "telem_current_pump", "telem_current_track1", "telem_current_track2",
-    "telem_pwm_pump", "telem_pwm_track1", "telem_pwm_track2",
-    "telem_pressure", "telem_temperature",
-    "telem_gyro_x", "telem_gyro_y", "telem_gyro_z",
-    "telem_accel_x", "telem_accel_y", "telem_accel_z",
-    "telem_magneto_x", "telem_magneto_y", "telem_magneto_z",
-    "telem_angle_rotation", "telem_cumul_angle_rotation",
-    "telem_cumul_angle_compass", "telem_cleaner_position",
-    "telem_movement_id", "telem_last_move_length",
-    "telem_loop_count", "telem_tilt_count", "telem_wall_count",
-    "telem_stairs_count", "telem_floor_blockage_count",
-    "telem_pattern_id", "telem_cycle_id",
+    "pressure_sensor_state", "compass_sensor_state",
+    "error_code", "internal_temp",
 }
 
 
