@@ -620,9 +620,13 @@ class AqualinkClient:
                     )
                     if first_msg.type == aiohttp.WSMsgType.TEXT:
                         first_data = first_msg.json() if first_msg.data else {}
-                        _LOGGER.warning(f"Listener: first response: service={first_data.get('service')}, event={first_data.get('event')}, keys={list(first_data.keys())[:10]}")
-                        # Process this first message through normal flow below
-                        # We'll handle it inline before entering the loop
+                        payload_keys = list(first_data.get('payload', {}).keys())[:15]
+                        _LOGGER.warning(f"Listener: first response: service={first_data.get('service')}, event={first_data.get('event')}, payload_keys={payload_keys}")
+                        # Check if payload has state (shadow)
+                        payload = first_data.get('payload', {})
+                        if 'state' in payload:
+                            state_keys = list(payload['state'].keys())[:10]
+                            _LOGGER.warning(f"Listener: shadow state keys: {state_keys}")
                         message_count += 1
                         total_message_count += 1
                     elif first_msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
@@ -635,12 +639,17 @@ class AqualinkClient:
                 reconnect_delay = 5
                 
                 # Listen for incoming messages on the DEDICATED connection
+                _LOGGER.warning(f"Listener: entering message loop (already got {message_count} msgs)")
                 async for message in self._listener_ws_connection:
                     if message.type == aiohttp.WSMsgType.TEXT:
                         message_count += 1
                         total_message_count += 1
                         try:
                             data = message.json()
+                            
+                            # Log first 5 messages at WARNING for diagnostics
+                            if message_count <= 5:
+                                _LOGGER.warning(f"Listener msg #{message_count}: service={data.get('service')}, event={data.get('event')}, keys={list(data.keys())[:8]}")
                             
                             # Log first few messages and then periodically
                             if message_count <= 3 or message_count % 50 == 0:
