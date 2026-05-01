@@ -616,17 +616,15 @@ class AqualinkClient:
                 # Wait for subscribe response with a timeout
                 try:
                     first_msg = await asyncio.wait_for(
-                        self._listener_ws_connection.receive(), timeout=15
+                        self._listener_ws_connection.receive(), timeout=10
                     )
                     if first_msg.type == aiohttp.WSMsgType.TEXT:
                         first_data = first_msg.json() if first_msg.data else {}
-                        payload = first_data.get('payload', {})
-                        payload_keys = list(payload.keys())[:15]
-                        _LOGGER.warning(f"Listener: ACK received, payload_keys={payload_keys}")
-                        # Log payload content (truncated)
                         import json
-                        payload_str = json.dumps(payload, default=str)[:500]
-                        _LOGGER.warning(f"Listener: payload={payload_str}")
+                        first_str = json.dumps(first_data, default=str)[:800]
+                        _LOGGER.warning(f"Listener: first response (full): {first_str}")
+                        
+                        payload = first_data.get('payload', {})
                         
                         # Cache schedule if present in shadow
                         if 'state' in payload:
@@ -666,7 +664,9 @@ class AqualinkClient:
                     )
                     if second_msg.type == aiohttp.WSMsgType.TEXT:
                         second_data = second_msg.json() if second_msg.data else {}
-                        _LOGGER.warning(f"Listener: StateStreamer response: service={second_data.get('service')}, event={second_data.get('event')}, keys={list(second_data.keys())[:10]}")
+                        import json
+                        ss_str = json.dumps(second_data, default=str)[:600]
+                        _LOGGER.warning(f"Listener: StateStreamer full response: {ss_str}")
                         message_count += 1
                         total_message_count += 1
                 except asyncio.TimeoutError:
