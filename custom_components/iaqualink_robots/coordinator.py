@@ -620,13 +620,25 @@ class AqualinkClient:
                     )
                     if first_msg.type == aiohttp.WSMsgType.TEXT:
                         first_data = first_msg.json() if first_msg.data else {}
-                        payload_keys = list(first_data.get('payload', {}).keys())[:15]
-                        _LOGGER.warning(f"Listener: first response: service={first_data.get('service')}, event={first_data.get('event')}, payload_keys={payload_keys}")
-                        # Check if payload has state (shadow)
                         payload = first_data.get('payload', {})
+                        payload_keys = list(payload.keys())[:15]
+                        _LOGGER.warning(f"Listener: ACK received, payload_keys={payload_keys}")
+                        # Log payload content (truncated)
+                        import json
+                        payload_str = json.dumps(payload, default=str)[:500]
+                        _LOGGER.warning(f"Listener: payload={payload_str}")
+                        
+                        # Cache schedule if present in shadow
                         if 'state' in payload:
-                            state_keys = list(payload['state'].keys())[:10]
-                            _LOGGER.warning(f"Listener: shadow state keys: {state_keys}")
+                            state = payload.get('state', {})
+                            reported = state.get('reported', {}) if isinstance(state, dict) else {}
+                            equipment = reported.get('equipment', {}) if isinstance(reported, dict) else {}
+                            robot_data = equipment.get('robot', {}) if isinstance(equipment, dict) else {}
+                            schedule = robot_data.get('schedule')
+                            if schedule and isinstance(schedule, dict):
+                                self._schedule_cache = schedule
+                                _LOGGER.warning(f"Listener: cached schedule from shadow: {list(schedule.keys())}")
+                        
                         message_count += 1
                         total_message_count += 1
                     elif first_msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
@@ -635,11 +647,36 @@ class AqualinkClient:
                 except asyncio.TimeoutError:
                     _LOGGER.warning("Listener: no response within 15s after subscribe - server silent")
                 
+                # Send a SECOND subscribe for StateStreamer to trigger telemetry push
+                streamer_req = {
+                    "action": "subscribe",
+                    "namespace": "authorization",
+                    "payload": {"userId": self._id},
+                    "service": "StateStreamer",
+                    "target": self._serial,
+                    "version": 1
+                }
+                await self._listener_ws_connection.send_json(streamer_req)
+                _LOGGER.warning(f"Listener: sent StateStreamer subscribe")
+                
+                # Wait for StateStreamer response
+                try:
+                    second_msg = await asyncio.wait_for(
+                        self._listener_ws_connection.receive(), timeout=15
+                    )
+                    if second_msg.type == aiohttp.WSMsgType.TEXT:
+                        second_data = second_msg.json() if second_msg.data else {}
+                        _LOGGER.warning(f"Listener: StateStreamer response: service={second_data.get('service')}, event={second_data.get('event')}, keys={list(second_data.keys())[:10]}")
+                        message_count += 1
+                        total_message_count += 1
+                except asyncio.TimeoutError:
+                    _LOGGER.warning("Listener: no StateStreamer response within 15s")
+                
                 # Reset backoff on successful connection
                 reconnect_delay = 5
                 
                 # Listen for incoming messages on the DEDICATED connection
-                _LOGGER.warning(f"Listener: entering message loop (already got {message_count} msgs)")
+                _LOGGER.warning(f"Listener: entering message loop (got {message_count} msgs so far)")
                 async for message in self._listener_ws_connection:
                     if message.type == aiohttp.WSMsgType.TEXT:
                         message_count += 1
