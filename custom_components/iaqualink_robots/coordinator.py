@@ -563,206 +563,234 @@ class AqualinkClient:
         Uses a SEPARATE websocket connection from the polling connection to avoid
         race conditions where both the listener and get_device_status() compete
         to read from the same connection.
-        """
-        message_count = 0
         
-        try:
-            # Create a dedicated websocket connection for the listener
-            await self._close_listener_websocket()  # Clean up any existing
-            
-            timeout = aiohttp.ClientTimeout(total=30)
-            self._listener_ws_session = aiohttp.ClientSession(timeout=timeout)
-            
-            ws_headers = {
-                "Authorization": self._id_token,
-                "Accept": "*/*"
-            }
-            
-            self._listener_ws_connection = await self._listener_ws_session.ws_connect(
-                URL_WS,
-                headers=ws_headers
-            )
-            
-            _LOGGER.debug(f"Listener: established dedicated websocket connection for robot {self._serial}")
-            
-            if not self._listener_ws_connection or self._listener_ws_connection.closed:
-                _LOGGER.warning("Cannot start websocket listener - dedicated connection failed")
-                return
-            
-            # Send initial subscription request to start receiving updates
-            subscribe_req = {
-                "action": "subscribe",
-                "namespace": "authorization", 
-                "payload": {"userId": self._id},
-                "service": "Authorization",
-                "target": self._serial,
-                "version": 1
-            }
-            
-            await self._listener_ws_connection.send_json(subscribe_req)
-            _LOGGER.debug(f"Listener: subscribed for robot {self._serial}")
-            
-            # Listen for incoming messages on the DEDICATED connection
-            async for message in self._listener_ws_connection:
-                if message.type == aiohttp.WSMsgType.TEXT:
-                    message_count += 1
-                    try:
-                        data = message.json()
+        Includes auto-reconnect with exponential backoff if the connection drops.
+        """
+        total_message_count = 0
+        reconnect_delay = 5  # Start with 5s, doubles up to 60s
+        max_reconnect_delay = 60
+        
+        while True:
+            message_count = 0
+            try:
+                # Create a dedicated websocket connection for the listener
+                await self._close_listener_websocket()  # Clean up any existing
+                
+                # No total timeout - WS must stay open indefinitely
+                # sock_connect=30 only limits the TCP handshake time
+                timeout = aiohttp.ClientTimeout(total=None, sock_connect=30)
+                self._listener_ws_session = aiohttp.ClientSession(timeout=timeout)
+                
+                ws_headers = {
+                    "Authorization": self._id_token,
+                    "Accept": "*/*"
+                }
+                
+                self._listener_ws_connection = await self._listener_ws_session.ws_connect(
+                    URL_WS,
+                    headers=ws_headers,
+                    heartbeat=30,  # Send ping every 30s to keep connection alive
+                )
+                
+                _LOGGER.debug(f"Listener: established dedicated websocket connection for robot {self._serial}")
+                
+                if not self._listener_ws_connection or self._listener_ws_connection.closed:
+                    _LOGGER.warning("Cannot start websocket listener - dedicated connection failed")
+                    await asyncio.sleep(reconnect_delay)
+                    reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
+                    continue
+                
+                # Send initial subscription request to start receiving updates
+                subscribe_req = {
+                    "action": "subscribe",
+                    "namespace": "authorization", 
+                    "payload": {"userId": self._id},
+                    "service": "Authorization",
+                    "target": self._serial,
+                    "version": 1
+                }
+                
+                await self._listener_ws_connection.send_json(subscribe_req)
+                _LOGGER.debug(f"Listener: subscribed for robot {self._serial}")
+                
+                # Reset backoff on successful connection
+                reconnect_delay = 5
+                
+                # Listen for incoming messages on the DEDICATED connection
+                async for message in self._listener_ws_connection:
+                    if message.type == aiohttp.WSMsgType.TEXT:
+                        message_count += 1
+                        total_message_count += 1
+                        try:
+                            data = message.json()
+                            
+                            # Log first few messages and then periodically
+                            if message_count <= 3 or message_count % 50 == 0:
+                                service = data.get("service", "?")
+                                event = data.get("event", "?")
+                                _LOGGER.debug(f"Listener msg #{message_count}: service={service}, event={event}")
+                            
+                            # Check if this is a state update message
+                            if (data.get("service") == "StateStreamer" and 
+                                data.get("event") == "StateReported"):
+                                
+                                payload = data.get("payload", {})
+                                state = payload.get("state", {})
+                                
+                                # Check for stepper updates (timing changes)
+                                reported_state = state.get("reported", {})
+                                equipment = reported_state.get("equipment", {})
+                                robot_data = equipment.get("robot", {})
+                                
+                                if "stepper" in robot_data:
+                                    new_stepper = robot_data["stepper"]
+                                    _LOGGER.debug(f"Real-time stepper update: {new_stepper}")
+                                    
+                                    # Cache the new stepper value for button commands
+                                    self._cached_stepper_value = new_stepper
+                                    self._cached_stepper_time = time.time()
+                                    
+                                    # Immediate entity update for ultra-fast responsiveness
+                                    if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
+                                        try:
+                                            asyncio.create_task(self._coordinator_callback())
+                                        except Exception as e:
+                                            _LOGGER.debug(f"Error calling coordinator callback: {e}")
+                                
+                                # Check for other robot state changes
+                                if any(key in robot_data for key in ['state', 'rmt_ctrl', 'errorState', 'cycleStartTime']):
+                                    _LOGGER.debug(f"Real-time robot state update received")
+                                    
+                                    # Immediate entity update for ultra-fast responsiveness
+                                    if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
+                                        try:
+                                            asyncio.create_task(self._coordinator_callback())
+                                        except Exception as e:
+                                            _LOGGER.debug(f"Error calling coordinator callback: {e}")
+                                
+                                # Cache schedule data from the shadow (arrives on subscribe response)
+                                schedule = robot_data.get('schedule')
+                                if schedule and isinstance(schedule, dict):
+                                    if not hasattr(self, '_schedule_cache'):
+                                        self._schedule_cache = {}
+                                    self._schedule_cache = schedule
+                                    _LOGGER.debug(f"Schedule data cached from listener: {list(schedule.keys())}")
+                            
+                            # === CAPTURE REAL-TIME TELEMETRY DATA ===
+                            # Telemetry arrives in a 'data' array within certain WS messages
+                            telemetry_array = data.get("data")
+                            if telemetry_array and isinstance(telemetry_array, list) and len(telemetry_array) > 0:
+                                telem = telemetry_array[-1]  # Use latest sample
+                                if isinstance(telem, dict):
+                                    if not hasattr(self, '_telemetry_cache'):
+                                        self._telemetry_cache = {}
+                                    # Voltages
+                                    if 'vEbox' in telem:
+                                        self._telemetry_cache["telem_voltage_ebox"] = telem.get('vEbox')
+                                    if 'vRobot' in telem:
+                                        self._telemetry_cache["telem_voltage_robot"] = telem.get('vRobot')
+                                    if 'vSensor' in telem:
+                                        self._telemetry_cache["telem_voltage_sensor"] = telem.get('vSensor')
+                                    # Currents
+                                    if 'iPump' in telem:
+                                        self._telemetry_cache["telem_current_pump"] = telem.get('iPump')
+                                    if 'iTract1' in telem:
+                                        self._telemetry_cache["telem_current_track1"] = telem.get('iTract1')
+                                    if 'iTract2' in telem:
+                                        self._telemetry_cache["telem_current_track2"] = telem.get('iTract2')
+                                    # PWM
+                                    if 'pwmPump' in telem:
+                                        self._telemetry_cache["telem_pwm_pump"] = telem.get('pwmPump')
+                                    if 'pwmTract1' in telem:
+                                        self._telemetry_cache["telem_pwm_track1"] = telem.get('pwmTract1')
+                                    if 'pwmTract2' in telem:
+                                        self._telemetry_cache["telem_pwm_track2"] = telem.get('pwmTract2')
+                                    # Environmental
+                                    if 'pressure' in telem:
+                                        self._telemetry_cache["telem_pressure"] = telem.get('pressure')
+                                    if 'temperature' in telem:
+                                        self._telemetry_cache["telem_temperature"] = telem.get('temperature')
+                                    # IMU - Gyroscope
+                                    gyro = telem.get('gyro')
+                                    if gyro and isinstance(gyro, list) and len(gyro) >= 3:
+                                        self._telemetry_cache["telem_gyro_x"] = gyro[0]
+                                        self._telemetry_cache["telem_gyro_y"] = gyro[1]
+                                        self._telemetry_cache["telem_gyro_z"] = gyro[2]
+                                    # IMU - Accelerometer
+                                    accel = telem.get('accelero')
+                                    if accel and isinstance(accel, list) and len(accel) >= 3:
+                                        self._telemetry_cache["telem_accel_x"] = accel[0]
+                                        self._telemetry_cache["telem_accel_y"] = accel[1]
+                                        self._telemetry_cache["telem_accel_z"] = accel[2]
+                                    # IMU - Magnetometer
+                                    mag = telem.get('magneto')
+                                    if mag and isinstance(mag, list) and len(mag) >= 3:
+                                        self._telemetry_cache["telem_magneto_x"] = mag[0]
+                                        self._telemetry_cache["telem_magneto_y"] = mag[1]
+                                        self._telemetry_cache["telem_magneto_z"] = mag[2]
+                                    # Navigation / Movement
+                                    if 'angleRotation' in telem:
+                                        self._telemetry_cache["telem_angle_rotation"] = telem.get('angleRotation')
+                                    if 'cumulAngleRotation' in telem:
+                                        self._telemetry_cache["telem_cumul_angle_rotation"] = telem.get('cumulAngleRotation')
+                                    if 'cumulAngleCompass' in telem:
+                                        self._telemetry_cache["telem_cumul_angle_compass"] = telem.get('cumulAngleCompass')
+                                    if 'cleanerPos' in telem:
+                                        self._telemetry_cache["telem_cleaner_position"] = telem.get('cleanerPos')
+                                    if 'movementId' in telem:
+                                        self._telemetry_cache["telem_movement_id"] = telem.get('movementId')
+                                    if 'lastMoveLength' in telem:
+                                        self._telemetry_cache["telem_last_move_length"] = telem.get('lastMoveLength')
+                                    # Counters
+                                    if 'loopCnt' in telem:
+                                        self._telemetry_cache["telem_loop_count"] = telem.get('loopCnt')
+                                    if 'tiltCnt' in telem:
+                                        self._telemetry_cache["telem_tilt_count"] = telem.get('tiltCnt')
+                                    if 'wallCnt' in telem:
+                                        self._telemetry_cache["telem_wall_count"] = telem.get('wallCnt')
+                                    if 'stairsCnt' in telem:
+                                        self._telemetry_cache["telem_stairs_count"] = telem.get('stairsCnt')
+                                    if 'floorBlockageCnt' in telem:
+                                        self._telemetry_cache["telem_floor_blockage_count"] = telem.get('floorBlockageCnt')
+                                    if 'patternId' in telem:
+                                        self._telemetry_cache["telem_pattern_id"] = telem.get('patternId')
+                                    if 'cycleId' in telem:
+                                        self._telemetry_cache["telem_cycle_id"] = telem.get('cycleId')
+                                    
+                                    _LOGGER.debug(f"Telemetry captured: {len(self._telemetry_cache)} fields")
+                                    
+                                    # Trigger coordinator update
+                                    if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
+                                        try:
+                                            asyncio.create_task(self._coordinator_callback())
+                                        except Exception as e:
+                                            _LOGGER.debug(f"Error calling coordinator callback for telemetry: {e}")
+                            
+                        except Exception as e:
+                            _LOGGER.debug(f"Error processing websocket message: {e}")
+                            
+                    elif message.type == aiohttp.WSMsgType.ERROR:
+                        _LOGGER.warning(f"Websocket error in listener")
+                        break
+                    elif message.type == aiohttp.WSMsgType.CLOSED:
+                        _LOGGER.debug("Websocket connection closed in listener")
+                        break
+                
+                # If we get here, the async for loop ended (connection closed gracefully)
+                _LOGGER.debug(f"Listener: connection ended after {message_count} messages, reconnecting...")
                         
-                        # Check if this is a state update message
-                        if (data.get("service") == "StateStreamer" and 
-                            data.get("event") == "StateReported"):
-                            
-                            payload = data.get("payload", {})
-                            state = payload.get("state", {})
-                            
-                            # Check for stepper updates (timing changes)
-                            reported_state = state.get("reported", {})
-                            equipment = reported_state.get("equipment", {})
-                            robot_data = equipment.get("robot", {})
-                            
-                            if "stepper" in robot_data:
-                                new_stepper = robot_data["stepper"]
-                                _LOGGER.debug(f"🎯 Real-time stepper update: {new_stepper}")
-                                
-                                # Cache the new stepper value for button commands
-                                self._cached_stepper_value = new_stepper
-                                self._cached_stepper_time = time.time()
-                                
-                                # Immediate entity update for ultra-fast responsiveness
-                                if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
-                                    try:
-                                        asyncio.create_task(self._coordinator_callback())
-                                    except Exception as e:
-                                        _LOGGER.debug(f"Error calling coordinator callback: {e}")
-                            
-                            # Check for other robot state changes
-                            if any(key in robot_data for key in ['state', 'rmt_ctrl', 'errorState', 'cycleStartTime']):
-                                _LOGGER.debug(f"🔄 Real-time robot state update received")
-                                
-                                # Immediate entity update for ultra-fast responsiveness
-                                if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
-                                    try:
-                                        asyncio.create_task(self._coordinator_callback())
-                                    except Exception as e:
-                                        _LOGGER.debug(f"Error calling coordinator callback: {e}")
-                            
-                            # Cache schedule data from the shadow (arrives on subscribe response)
-                            schedule = robot_data.get('schedule')
-                            if schedule and isinstance(schedule, dict):
-                                if not hasattr(self, '_schedule_cache'):
-                                    self._schedule_cache = {}
-                                self._schedule_cache = schedule
-                                _LOGGER.debug(f"📅 Schedule data cached from listener: {list(schedule.keys())}")
-                        
-                        # === CAPTURE REAL-TIME TELEMETRY DATA ===
-                        # Telemetry arrives in a 'data' array within certain WS messages
-                        telemetry_array = data.get("data")
-                        if telemetry_array and isinstance(telemetry_array, list) and len(telemetry_array) > 0:
-                            telem = telemetry_array[-1]  # Use latest sample
-                            if isinstance(telem, dict):
-                                if not hasattr(self, '_telemetry_cache'):
-                                    self._telemetry_cache = {}
-                                # Voltages
-                                if 'vEbox' in telem:
-                                    self._telemetry_cache["telem_voltage_ebox"] = telem.get('vEbox')
-                                if 'vRobot' in telem:
-                                    self._telemetry_cache["telem_voltage_robot"] = telem.get('vRobot')
-                                if 'vSensor' in telem:
-                                    self._telemetry_cache["telem_voltage_sensor"] = telem.get('vSensor')
-                                # Currents
-                                if 'iPump' in telem:
-                                    self._telemetry_cache["telem_current_pump"] = telem.get('iPump')
-                                if 'iTract1' in telem:
-                                    self._telemetry_cache["telem_current_track1"] = telem.get('iTract1')
-                                if 'iTract2' in telem:
-                                    self._telemetry_cache["telem_current_track2"] = telem.get('iTract2')
-                                # PWM
-                                if 'pwmPump' in telem:
-                                    self._telemetry_cache["telem_pwm_pump"] = telem.get('pwmPump')
-                                if 'pwmTract1' in telem:
-                                    self._telemetry_cache["telem_pwm_track1"] = telem.get('pwmTract1')
-                                if 'pwmTract2' in telem:
-                                    self._telemetry_cache["telem_pwm_track2"] = telem.get('pwmTract2')
-                                # Environmental
-                                if 'pressure' in telem:
-                                    self._telemetry_cache["telem_pressure"] = telem.get('pressure')
-                                if 'temperature' in telem:
-                                    self._telemetry_cache["telem_temperature"] = telem.get('temperature')
-                                # IMU - Gyroscope
-                                gyro = telem.get('gyro')
-                                if gyro and isinstance(gyro, list) and len(gyro) >= 3:
-                                    self._telemetry_cache["telem_gyro_x"] = gyro[0]
-                                    self._telemetry_cache["telem_gyro_y"] = gyro[1]
-                                    self._telemetry_cache["telem_gyro_z"] = gyro[2]
-                                # IMU - Accelerometer
-                                accel = telem.get('accelero')
-                                if accel and isinstance(accel, list) and len(accel) >= 3:
-                                    self._telemetry_cache["telem_accel_x"] = accel[0]
-                                    self._telemetry_cache["telem_accel_y"] = accel[1]
-                                    self._telemetry_cache["telem_accel_z"] = accel[2]
-                                # IMU - Magnetometer
-                                mag = telem.get('magneto')
-                                if mag and isinstance(mag, list) and len(mag) >= 3:
-                                    self._telemetry_cache["telem_magneto_x"] = mag[0]
-                                    self._telemetry_cache["telem_magneto_y"] = mag[1]
-                                    self._telemetry_cache["telem_magneto_z"] = mag[2]
-                                # Navigation / Movement
-                                if 'angleRotation' in telem:
-                                    self._telemetry_cache["telem_angle_rotation"] = telem.get('angleRotation')
-                                if 'cumulAngleRotation' in telem:
-                                    self._telemetry_cache["telem_cumul_angle_rotation"] = telem.get('cumulAngleRotation')
-                                if 'cumulAngleCompass' in telem:
-                                    self._telemetry_cache["telem_cumul_angle_compass"] = telem.get('cumulAngleCompass')
-                                if 'cleanerPos' in telem:
-                                    self._telemetry_cache["telem_cleaner_position"] = telem.get('cleanerPos')
-                                if 'movementId' in telem:
-                                    self._telemetry_cache["telem_movement_id"] = telem.get('movementId')
-                                if 'lastMoveLength' in telem:
-                                    self._telemetry_cache["telem_last_move_length"] = telem.get('lastMoveLength')
-                                # Counters
-                                if 'loopCnt' in telem:
-                                    self._telemetry_cache["telem_loop_count"] = telem.get('loopCnt')
-                                if 'tiltCnt' in telem:
-                                    self._telemetry_cache["telem_tilt_count"] = telem.get('tiltCnt')
-                                if 'wallCnt' in telem:
-                                    self._telemetry_cache["telem_wall_count"] = telem.get('wallCnt')
-                                if 'stairsCnt' in telem:
-                                    self._telemetry_cache["telem_stairs_count"] = telem.get('stairsCnt')
-                                if 'floorBlockageCnt' in telem:
-                                    self._telemetry_cache["telem_floor_blockage_count"] = telem.get('floorBlockageCnt')
-                                if 'patternId' in telem:
-                                    self._telemetry_cache["telem_pattern_id"] = telem.get('patternId')
-                                if 'cycleId' in telem:
-                                    self._telemetry_cache["telem_cycle_id"] = telem.get('cycleId')
-                                
-                                _LOGGER.debug(f"📊 Telemetry captured: {len(self._telemetry_cache)} fields")
-                                
-                                # Trigger coordinator update
-                                if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
-                                    try:
-                                        asyncio.create_task(self._coordinator_callback())
-                                    except Exception as e:
-                                        _LOGGER.debug(f"Error calling coordinator callback for telemetry: {e}")
-                        
-                    except Exception as e:
-                        _LOGGER.debug(f"Error processing websocket message: {e}")
-                        
-                elif message.type == aiohttp.WSMsgType.ERROR:
-                    _LOGGER.warning(f"Websocket error in listener")
-                    break
-                elif message.type == aiohttp.WSMsgType.CLOSED:
-                    _LOGGER.debug("Websocket connection closed in listener")
-                    break
-                    
-        except asyncio.CancelledError:
-            _LOGGER.debug("Websocket listener cancelled")
-            raise
-        except Exception as e:
-            _LOGGER.warning(f"Websocket listener error: {e}")
-        finally:
-            _LOGGER.debug(f"Websocket listener stopped after {message_count} messages")
-            await self._close_listener_websocket()
+            except asyncio.CancelledError:
+                _LOGGER.debug(f"Websocket listener cancelled (total messages: {total_message_count})")
+                raise
+            except Exception as e:
+                _LOGGER.warning(f"Websocket listener error: {e}, reconnecting in {reconnect_delay}s...")
+            finally:
+                await self._close_listener_websocket()
+            
+            # Wait before reconnecting (exponential backoff)
+            await asyncio.sleep(reconnect_delay)
+            reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
+            _LOGGER.debug(f"Listener: attempting reconnection...")
 
     def set_coordinator_callback(self, callback):
         """Set the callback function to notify coordinator of real-time updates."""
