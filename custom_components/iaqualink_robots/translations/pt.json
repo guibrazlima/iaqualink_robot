@@ -40,66 +40,97 @@
   },
   "entity": {
     "sensor": {
-      "serial_number": {
-        "name": "Número de Série"
-      },
-      "device_type": {
-        "name": "Tipo de Dispositivo"
-      },
-      "cycle_start_time": {
-        "name": "Hora de Início do Ciclo"
-      },
-      "cycle_duration": {
-        "name": "Duração do Ciclo"
-      },
-      "cycle": {
-        "name": "Ciclo"
-      },
-      "battery_level": {
-        "name": "Nível da Bateria"
-      },
-      "total_hours": {
-        "name": "Horas Totais"
-      },
-      "canister": {
-        "name": "Nível do Recipiente"
-      },
-      "error_state": {
-        "name": "Estado de Erro"
-      },
-      "temperature": {
-        "name": "Temperatura"
-      },
-      "time_remaining_human": {
-        "name": "Tempo Restante"
-      },
-      "estimated_end_time": {
-        "name": "Hora Estimada de Término"
-      },
-      "model": {
-        "name": "Modelo"
-      },
-      "time_remaining": {
-        "name": "Tempo restante (Minutos)"
-      },
-      "fan_speed": {
-        "name": "Velocidade da ventoinha"
-      },
-      "activity": {
-        "name": "Atividade"
-      },
-      "status": {
-        "name": "Status"
-      },
-      "stepper": {
-        "name": "Ajustes de tempo"
-      },
-      "stepper_adj_time": {
-        "name": "Incremento de ajuste"
-      },
-      "stepper_adjustment_minutes": {
-        "name": "Tempo adicionado/reduzido"
-      }
+      "serial_number": { "name": "Número de Série" },
+      "device_type": { "name": "Tipo de Dispositivo" },
+      "cycle_start_time": { "name": "Hora de Início do Ciclo" },
+      "cycle_duration": { "name": "Duração do Ciclo" },
+      "cycle": { "name": "Ciclo" },
+      "battery_level": { "name": "Nível da Bateria" },
+      "total_hours": { "name": "Horas Totais" },
+      "canister": { "name": "Nível do Recipiente" },
+      "error_state": { "name": "Estado de Erro" },
+      "temperature": { "name": "Temperatura" },
+      "time_remaining_human": { "name": "Tempo Restante" },
+      "estimated_end_time": { "name": "Hora Estimada de Término" },
+      "model": { "name": "Modelo" },
+      "time_remaining": { "name": "Tempo restante (Minutos)" },
+      "fan_speed": { "name": "Velocidade da ventoinha" },
+      "activity": { "name": "Atividade" },
+      "status": { "name": "Status" },
+      "stepper": { "name": "Ajustes de tempo" },
+      "stepper_adj_time": { "name": "Incremento de ajuste" },
+      "base_cycle_duration": { "name": "Duração Original" },
+      "stepper_adjustment_minutes": { "name": "Tempo adicionado/reduzido" },
+      "adjusted_cycle_duration": { "name": "Duração Total" },
+      "ebox_control_box_sn": { "name": "Nº Série Caixa de Controlo" },
+      "ebox_cleaner_sn": { "name": "Nº Série Robô Completo" },
+      "ebox_power_supply_sn": { "name": "Nº Série Fonte de Alimentação" },
+      "ebox_sensor_block_sn": { "name": "Nº Série Bloco de Sensores" },
+      "ebox_motor_block_sn": { "name": "Nº Série Bloco Motor" },
+      "ebox_control_box_pn": { "name": "Ref. Caixa de Controlo" },
+      "ebox_cleaner_pn": { "name": "Ref. Robô Completo" },
+      "ebox_firmware": { "name": "Firmware Ebox" },
+      "robot_firmware": { "name": "Firmware Robô" },
+      "duration_water": { "name": "Duração: Linha de Água" },
+      "duration_quick": { "name": "Duração: Rápido" },
+      "duration_smart": { "name": "Duração: Inteligente" },
+      "duration_deep": { "name": "Duração: Profundo" },
+      "duration_custom": { "name": "Duração: Personalizado" },
+      "duration_first_smart": { "name": "Duração: 1º Inteligente" },
+      "schedule_mon_enabled": { "name": "Agenda Seg Ativado" },
+      "schedule_mon_program": { "name": "Agenda Seg Programa" },
+      "schedule_mon_time": { "name": "Agenda Seg Hora" },
+      "schedule_tue_enabled": { "name": "Agenda Ter Ativado" },
+      "schedule_tue_program": { "name": "Agenda Ter Programa" },
+      "schedule_tue_time": { "name": "Agenda Ter Hora" },
+      "schedule_wed_enabled": { "name": "Agenda Qua Ativado" },
+      "schedule_wed_program": { "name": "Agenda Qua Programa" },
+      "schedule_wed_time": { "name": "Agenda Qua Hora" },
+      "schedule_thu_enabled": { "name": "Agenda Qui Ativado" },
+      "schedule_thu_program": { "name": "Agenda Qui Programa" },
+      "schedule_thu_time": { "name": "Agenda Qui Hora" },
+      "schedule_fri_enabled": { "name": "Agenda Sex Ativado" },
+      "schedule_fri_program": { "name": "Agenda Sex Programa" },
+      "schedule_fri_time": { "name": "Agenda Sex Hora" },
+      "schedule_sat_enabled": { "name": "Agenda Sáb Ativado" },
+      "schedule_sat_program": { "name": "Agenda Sáb Programa" },
+      "schedule_sat_time": { "name": "Agenda Sáb Hora" },
+      "schedule_sun_enabled": { "name": "Agenda Dom Ativado" },
+      "schedule_sun_program": { "name": "Agenda Dom Programa" },
+      "schedule_sun_time": { "name": "Agenda Dom Hora" },
+      "telem_voltage_ebox": { "name": "Tensão: Ebox" },
+      "telem_voltage_robot": { "name": "Tensão: Robô" },
+      "telem_voltage_sensor": { "name": "Tensão: Sensor" },
+      "telem_current_pump": { "name": "Corrente: Bomba" },
+      "telem_current_track1": { "name": "Corrente: Lagarta 1" },
+      "telem_current_track2": { "name": "Corrente: Lagarta 2" },
+      "telem_pwm_pump": { "name": "PWM: Bomba" },
+      "telem_pwm_track1": { "name": "PWM: Lagarta 1" },
+      "telem_pwm_track2": { "name": "PWM: Lagarta 2" },
+      "telem_pressure": { "name": "Pressão" },
+      "telem_temperature": { "name": "Temperatura da Água (Tempo Real)" },
+      "telem_gyro_x": { "name": "Giroscópio X" },
+      "telem_gyro_y": { "name": "Giroscópio Y" },
+      "telem_gyro_z": { "name": "Giroscópio Z" },
+      "telem_accel_x": { "name": "Acelerómetro X" },
+      "telem_accel_y": { "name": "Acelerómetro Y" },
+      "telem_accel_z": { "name": "Acelerómetro Z" },
+      "telem_magneto_x": { "name": "Magnetómetro X" },
+      "telem_magneto_y": { "name": "Magnetómetro Y" },
+      "telem_magneto_z": { "name": "Magnetómetro Z" },
+      "telem_angle_rotation": { "name": "Ângulo de Rotação" },
+      "telem_cumul_angle_rotation": { "name": "Ângulo Acumulado de Rotação" },
+      "telem_cumul_angle_compass": { "name": "Ângulo Acumulado da Bússola" },
+      "telem_cleaner_position": { "name": "Posição do Robô" },
+      "telem_movement_id": { "name": "ID do Movimento" },
+      "telem_last_move_length": { "name": "Comprimento Último Movimento" },
+      "telem_loop_count": { "name": "Contagem de Loops" },
+      "telem_tilt_count": { "name": "Contagem de Inclinações" },
+      "telem_wall_count": { "name": "Contagem Contactos Parede" },
+      "telem_stairs_count": { "name": "Contagem de Escadas" },
+      "telem_floor_blockage_count": { "name": "Contagem Bloqueios Chão" },
+      "telem_pattern_id": { "name": "ID do Padrão" },
+      "telem_cycle_id": { "name": "ID do Ciclo" }
     },
     "button": {
       "remote_forward": {
