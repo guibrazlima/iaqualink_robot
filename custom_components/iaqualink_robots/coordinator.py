@@ -613,29 +613,55 @@ class AqualinkClient:
                 await self._listener_ws_connection.send_json(subscribe_req)
                 _LOGGER.warning(f"Listener: subscribe sent (userId={self._id}, target={self._serial})")
                 
-                # Wait for subscribe response with a timeout
+                # Wait for subscribe response — returns the device shadow
                 try:
                     first_msg = await asyncio.wait_for(
-                        self._listener_ws_connection.receive(), timeout=10
+                        self._listener_ws_connection.receive(), timeout=15
                     )
                     if first_msg.type == aiohttp.WSMsgType.TEXT:
                         first_data = first_msg.json() if first_msg.data else {}
-                        import json
-                        first_str = json.dumps(first_data, default=str)[:800]
-                        _LOGGER.warning(f"Listener: first response (full): {first_str}")
-                        
                         payload = first_data.get('payload', {})
                         
-                        # Cache schedule if present in shadow
-                        if 'state' in payload:
-                            state = payload.get('state', {})
-                            reported = state.get('reported', {}) if isinstance(state, dict) else {}
-                            equipment = reported.get('equipment', {}) if isinstance(reported, dict) else {}
-                            robot_data = equipment.get('robot', {}) if isinstance(equipment, dict) else {}
-                            schedule = robot_data.get('schedule')
-                            if schedule and isinstance(schedule, dict):
-                                self._schedule_cache = schedule
-                                _LOGGER.warning(f"Listener: cached schedule from shadow: {list(schedule.keys())}")
+                        # Navigate to the robot state in the shadow
+                        robot_payload = payload.get('robot', payload)
+                        state = robot_payload.get('state', {})
+                        reported = state.get('reported', {}) if isinstance(state, dict) else {}
+                        equipment = reported.get('equipment', {}) if isinstance(reported, dict) else {}
+                        robot_data = equipment.get('robot', {}) if isinstance(equipment, dict) else {}
+                        
+                        # Log key telemetry-related fields from the shadow
+                        import json
+                        robot_keys = list(robot_data.keys()) if isinstance(robot_data, dict) else []
+                        reported_keys = list(reported.keys()) if isinstance(reported, dict) else []
+                        _LOGGER.warning(f"Listener: shadow reported_keys={reported_keys}")
+                        _LOGGER.warning(f"Listener: shadow robot_keys={robot_keys}")
+                        
+                        # Check for telemetry data array
+                        data_array = robot_data.get('data')
+                        if data_array:
+                            _LOGGER.warning(f"Listener: found 'data' in robot! type={type(data_array).__name__}, len={len(data_array) if isinstance(data_array, (list, dict)) else '?'}")
+                            if isinstance(data_array, list) and len(data_array) > 0:
+                                _LOGGER.warning(f"Listener: data[0]={json.dumps(data_array[0], default=str)[:300]}")
+                        else:
+                            _LOGGER.warning(f"Listener: NO 'data' array in robot shadow")
+                        
+                        # Check for telemetry under reported directly
+                        for key in ['data', 'telemetry', 'sensors', 'debug']:
+                            if key in reported:
+                                val = reported[key]
+                                _LOGGER.warning(f"Listener: found '{key}' in reported! type={type(val).__name__}")
+                        
+                        # Log robot operational state
+                        robot_state = robot_data.get('state', '?')
+                        prCyc = robot_data.get('prCyc', '?')
+                        cycleStart = robot_data.get('cycleStartTime', '?')
+                        _LOGGER.warning(f"Listener: robot state={robot_state}, prCyc={prCyc}, cycleStart={cycleStart}")
+                        
+                        # Cache schedule if present
+                        schedule = robot_data.get('schedule')
+                        if schedule and isinstance(schedule, dict):
+                            self._schedule_cache = schedule
+                            _LOGGER.warning(f"Listener: cached schedule from shadow")
                         
                         message_count += 1
                         total_message_count += 1
@@ -643,34 +669,7 @@ class AqualinkClient:
                         _LOGGER.warning(f"Listener: WS closed/error on first receive: {first_msg.type}")
                         continue
                 except asyncio.TimeoutError:
-                    _LOGGER.warning("Listener: no response within 15s after subscribe - server silent")
-                
-                # Send a SECOND subscribe for StateStreamer to trigger telemetry push
-                streamer_req = {
-                    "action": "subscribe",
-                    "namespace": "authorization",
-                    "payload": {"userId": self._id},
-                    "service": "StateStreamer",
-                    "target": self._serial,
-                    "version": 1
-                }
-                await self._listener_ws_connection.send_json(streamer_req)
-                _LOGGER.warning(f"Listener: sent StateStreamer subscribe")
-                
-                # Wait for StateStreamer response
-                try:
-                    second_msg = await asyncio.wait_for(
-                        self._listener_ws_connection.receive(), timeout=15
-                    )
-                    if second_msg.type == aiohttp.WSMsgType.TEXT:
-                        second_data = second_msg.json() if second_msg.data else {}
-                        import json
-                        ss_str = json.dumps(second_data, default=str)[:600]
-                        _LOGGER.warning(f"Listener: StateStreamer full response: {ss_str}")
-                        message_count += 1
-                        total_message_count += 1
-                except asyncio.TimeoutError:
-                    _LOGGER.warning("Listener: no StateStreamer response within 15s")
+                    _LOGGER.warning("Listener: no shadow response within 15s - server silent")
                 
                 # Reset backoff on successful connection
                 reconnect_delay = 5
