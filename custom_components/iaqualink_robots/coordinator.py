@@ -592,7 +592,7 @@ class AqualinkClient:
                     heartbeat=30,  # Send ping every 30s to keep connection alive
                 )
                 
-                _LOGGER.debug(f"Listener: established dedicated websocket connection for robot {self._serial}")
+                _LOGGER.warning(f"Listener: WS connected to {URL_WS} for robot {self._serial}")
                 
                 if not self._listener_ws_connection or self._listener_ws_connection.closed:
                     _LOGGER.warning("Cannot start websocket listener - dedicated connection failed")
@@ -611,7 +611,25 @@ class AqualinkClient:
                 }
                 
                 await self._listener_ws_connection.send_json(subscribe_req)
-                _LOGGER.debug(f"Listener: subscribed for robot {self._serial}")
+                _LOGGER.warning(f"Listener: subscribe sent (userId={self._id}, target={self._serial})")
+                
+                # Wait for subscribe response with a timeout
+                try:
+                    first_msg = await asyncio.wait_for(
+                        self._listener_ws_connection.receive(), timeout=15
+                    )
+                    if first_msg.type == aiohttp.WSMsgType.TEXT:
+                        first_data = first_msg.json() if first_msg.data else {}
+                        _LOGGER.warning(f"Listener: first response: service={first_data.get('service')}, event={first_data.get('event')}, keys={list(first_data.keys())[:10]}")
+                        # Process this first message through normal flow below
+                        # We'll handle it inline before entering the loop
+                        message_count += 1
+                        total_message_count += 1
+                    elif first_msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
+                        _LOGGER.warning(f"Listener: WS closed/error on first receive: {first_msg.type}")
+                        continue
+                except asyncio.TimeoutError:
+                    _LOGGER.warning("Listener: no response within 15s after subscribe - server silent")
                 
                 # Reset backoff on successful connection
                 reconnect_delay = 5
