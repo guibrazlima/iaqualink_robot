@@ -636,26 +636,25 @@ class AqualinkClient:
                         _LOGGER.warning(f"Listener: shadow reported_keys={reported_keys}")
                         _LOGGER.warning(f"Listener: shadow robot_keys={robot_keys}")
                         
-                        # Check for telemetry data array
-                        data_array = robot_data.get('data')
-                        if data_array:
-                            _LOGGER.warning(f"Listener: found 'data' in robot! type={type(data_array).__name__}, len={len(data_array) if isinstance(data_array, (list, dict)) else '?'}")
-                            if isinstance(data_array, list) and len(data_array) > 0:
-                                _LOGGER.warning(f"Listener: data[0]={json.dumps(data_array[0], default=str)[:300]}")
+                        # Log the actual telemetry fields from the shadow
+                        sensors_data = robot_data.get('sensors')
+                        if sensors_data:
+                            _LOGGER.warning(f"Listener: SENSORS type={type(sensors_data).__name__}, content={json.dumps(sensors_data, default=str)[:2000]}")
                         else:
-                            _LOGGER.warning(f"Listener: NO 'data' array in robot shadow")
+                            _LOGGER.warning(f"Listener: sensors=None/missing")
                         
-                        # Check for telemetry under reported directly
-                        for key in ['data', 'telemetry', 'sensors', 'debug']:
-                            if key in reported:
-                                val = reported[key]
-                                _LOGGER.warning(f"Listener: found '{key}' in reported! type={type(val).__name__}")
+                        diagnostic_data = robot_data.get('diagnostic')
+                        if diagnostic_data:
+                            _LOGGER.warning(f"Listener: DIAGNOSTIC type={type(diagnostic_data).__name__}, content={json.dumps(diagnostic_data, default=str)[:2000]}")
+                        else:
+                            _LOGGER.warning(f"Listener: diagnostic=None/missing")
                         
-                        # Log robot operational state
-                        robot_state = robot_data.get('state', '?')
-                        prCyc = robot_data.get('prCyc', '?')
-                        cycleStart = robot_data.get('cycleStartTime', '?')
-                        _LOGGER.warning(f"Listener: robot state={robot_state}, prCyc={prCyc}, cycleStart={cycleStart}")
+                        durations_data = robot_data.get('durations')
+                        if durations_data:
+                            _LOGGER.warning(f"Listener: DURATIONS={json.dumps(durations_data, default=str)[:500]}")
+                        
+                        tmp_data = robot_data.get('tmp')
+                        _LOGGER.warning(f"Listener: tmp={tmp_data}, totalHours={robot_data.get('totalHours')}, stepper={robot_data.get('stepper')}, errorState={robot_data.get('errorState')}, errorCode={robot_data.get('errorCode')}")
                         
                         # Cache schedule if present
                         schedule = robot_data.get('schedule')
