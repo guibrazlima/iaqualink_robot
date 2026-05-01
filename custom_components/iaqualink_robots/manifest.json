@@ -1,15 +1,14 @@
 {
   "domain": "iaqualinkRobots",
-  "name": "iAqualink Robots",
-  "codeowners": ["@galletn"],
+  "name": "iAqualink Robots (Enhanced)",
+  "codeowners": ["@galletn", "@guibrazlima"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/galletn/iaqualink/",
+  "documentation": "https://github.com/guibrazlima/iaqualink_robot/",
   "integration_type": "device",
-  "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/galletn/iaqualink/issues/",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/guibrazlima/iaqualink_robot/issues/",
   "requirements": ["aiohttp>=3.9.0"],
   "homeassistant": "2025.1.0",
-  "version": "2.5.1"
+  "version": "3.0.0"
 }
-

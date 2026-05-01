@@ -60,6 +60,8 @@ class AqualinkClient:
         self._max_ws_failures_before_offline = 5  # Allow 5 websocket connection failures before marking offline
         # Simple instance ID for logging purposes
         self._instance_id = f"ha-{hash(username + str(id(self))) % 10000:04d}"
+        # Telemetry cache for real-time sensor data from WebSocket
+        self._telemetry_cache = {}
         
         # Status stabilization to prevent rapid connection status changes
         self._status_history = []  # Track recent status values
@@ -587,7 +589,6 @@ class AqualinkClient:
                                 # Immediate entity update for ultra-fast responsiveness
                                 if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
                                     try:
-                                        # Use asyncio.create_task for immediate execution without waiting
                                         asyncio.create_task(self._coordinator_callback())
                                     except Exception as e:
                                         _LOGGER.debug(f"Error calling coordinator callback: {e}")
@@ -599,10 +600,99 @@ class AqualinkClient:
                                 # Immediate entity update for ultra-fast responsiveness
                                 if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
                                     try:
-                                        # Use asyncio.create_task for immediate execution without waiting
                                         asyncio.create_task(self._coordinator_callback())
                                     except Exception as e:
                                         _LOGGER.debug(f"Error calling coordinator callback: {e}")
+                        
+                        # === CAPTURE REAL-TIME TELEMETRY DATA ===
+                        # Telemetry arrives in a 'data' array within certain WS messages
+                        telemetry_array = data.get("data")
+                        if telemetry_array and isinstance(telemetry_array, list) and len(telemetry_array) > 0:
+                            telem = telemetry_array[-1]  # Use latest sample
+                            if isinstance(telem, dict):
+                                if not hasattr(self, '_telemetry_cache'):
+                                    self._telemetry_cache = {}
+                                # Voltages
+                                if 'vEbox' in telem:
+                                    self._telemetry_cache["telem_voltage_ebox"] = telem.get('vEbox')
+                                if 'vRobot' in telem:
+                                    self._telemetry_cache["telem_voltage_robot"] = telem.get('vRobot')
+                                if 'vSensor' in telem:
+                                    self._telemetry_cache["telem_voltage_sensor"] = telem.get('vSensor')
+                                # Currents
+                                if 'iPump' in telem:
+                                    self._telemetry_cache["telem_current_pump"] = telem.get('iPump')
+                                if 'iTract1' in telem:
+                                    self._telemetry_cache["telem_current_track1"] = telem.get('iTract1')
+                                if 'iTract2' in telem:
+                                    self._telemetry_cache["telem_current_track2"] = telem.get('iTract2')
+                                # PWM
+                                if 'pwmPump' in telem:
+                                    self._telemetry_cache["telem_pwm_pump"] = telem.get('pwmPump')
+                                if 'pwmTract1' in telem:
+                                    self._telemetry_cache["telem_pwm_track1"] = telem.get('pwmTract1')
+                                if 'pwmTract2' in telem:
+                                    self._telemetry_cache["telem_pwm_track2"] = telem.get('pwmTract2')
+                                # Environmental
+                                if 'pressure' in telem:
+                                    self._telemetry_cache["telem_pressure"] = telem.get('pressure')
+                                if 'temperature' in telem:
+                                    self._telemetry_cache["telem_temperature"] = telem.get('temperature')
+                                # IMU - Gyroscope
+                                gyro = telem.get('gyro')
+                                if gyro and isinstance(gyro, list) and len(gyro) >= 3:
+                                    self._telemetry_cache["telem_gyro_x"] = gyro[0]
+                                    self._telemetry_cache["telem_gyro_y"] = gyro[1]
+                                    self._telemetry_cache["telem_gyro_z"] = gyro[2]
+                                # IMU - Accelerometer
+                                accel = telem.get('accelero')
+                                if accel and isinstance(accel, list) and len(accel) >= 3:
+                                    self._telemetry_cache["telem_accel_x"] = accel[0]
+                                    self._telemetry_cache["telem_accel_y"] = accel[1]
+                                    self._telemetry_cache["telem_accel_z"] = accel[2]
+                                # IMU - Magnetometer
+                                mag = telem.get('magneto')
+                                if mag and isinstance(mag, list) and len(mag) >= 3:
+                                    self._telemetry_cache["telem_magneto_x"] = mag[0]
+                                    self._telemetry_cache["telem_magneto_y"] = mag[1]
+                                    self._telemetry_cache["telem_magneto_z"] = mag[2]
+                                # Navigation / Movement
+                                if 'angleRotation' in telem:
+                                    self._telemetry_cache["telem_angle_rotation"] = telem.get('angleRotation')
+                                if 'cumulAngleRotation' in telem:
+                                    self._telemetry_cache["telem_cumul_angle_rotation"] = telem.get('cumulAngleRotation')
+                                if 'cumulAngleCompass' in telem:
+                                    self._telemetry_cache["telem_cumul_angle_compass"] = telem.get('cumulAngleCompass')
+                                if 'cleanerPos' in telem:
+                                    self._telemetry_cache["telem_cleaner_position"] = telem.get('cleanerPos')
+                                if 'movementId' in telem:
+                                    self._telemetry_cache["telem_movement_id"] = telem.get('movementId')
+                                if 'lastMoveLength' in telem:
+                                    self._telemetry_cache["telem_last_move_length"] = telem.get('lastMoveLength')
+                                # Counters
+                                if 'loopCnt' in telem:
+                                    self._telemetry_cache["telem_loop_count"] = telem.get('loopCnt')
+                                if 'tiltCnt' in telem:
+                                    self._telemetry_cache["telem_tilt_count"] = telem.get('tiltCnt')
+                                if 'wallCnt' in telem:
+                                    self._telemetry_cache["telem_wall_count"] = telem.get('wallCnt')
+                                if 'stairsCnt' in telem:
+                                    self._telemetry_cache["telem_stairs_count"] = telem.get('stairsCnt')
+                                if 'floorBlockageCnt' in telem:
+                                    self._telemetry_cache["telem_floor_blockage_count"] = telem.get('floorBlockageCnt')
+                                if 'patternId' in telem:
+                                    self._telemetry_cache["telem_pattern_id"] = telem.get('patternId')
+                                if 'cycleId' in telem:
+                                    self._telemetry_cache["telem_cycle_id"] = telem.get('cycleId')
+                                
+                                _LOGGER.debug(f"📊 Telemetry captured: {len(self._telemetry_cache)} fields")
+                                
+                                # Trigger coordinator update
+                                if hasattr(self, '_coordinator_callback') and self._coordinator_callback:
+                                    try:
+                                        asyncio.create_task(self._coordinator_callback())
+                                    except Exception as e:
+                                        _LOGGER.debug(f"Error calling coordinator callback for telemetry: {e}")
                         
                     except Exception as e:
                         _LOGGER.debug(f"Error processing websocket message: {e}")
@@ -1088,16 +1178,37 @@ class AqualinkClient:
             result["activity"] = "unknown"
             result["error_state"] = "no_data"
             return
-            
+
+        # === EBOX DATA (hardware serials, firmware, product numbers) ===
+        try:
+            ebox = data['payload']['robot']['state']['reported']['eboxData']
+            result["ebox_control_box_sn"] = ebox.get('controlBoxSn', 'unknown')
+            result["ebox_cleaner_sn"] = ebox.get('completeCleanerSn', 'unknown')
+            result["ebox_power_supply_sn"] = ebox.get('powerSupplySn', 'unknown')
+            result["ebox_sensor_block_sn"] = ebox.get('sensorBlockSn', 'unknown')
+            result["ebox_motor_block_sn"] = ebox.get('motorBlockSn', 'unknown')
+            result["ebox_control_box_pn"] = ebox.get('controlBoxPn', 'unknown')
+            result["ebox_cleaner_pn"] = ebox.get('completeCleanerPn', 'unknown')
+            result["ebox_firmware"] = ebox.get('vr', 'unknown')
+        except (KeyError, TypeError):
+            pass
+
+        # === ROBOT FIRMWARE VERSION ===
+        try:
+            result["robot_firmware"] = robot_data.get('vr', 'unknown')
+        except (KeyError, TypeError):
+            result["robot_firmware"] = "unknown"
+
+        # === TEMPERATURE ===
         try:
             result["temperature"] = robot_data['sensors']['sns_1']['val']
         except Exception:
             try: 
                 result["temperature"] = robot_data['sensors']['sns_1']['state']
             except Exception:
-                # Zodiac XA 5095 iQ does not support temp
                 result["temperature"] = '0'
 
+        # === ACTIVITY STATE ===
         try:
             robot_state = robot_data['state']
             if robot_state == 1:
@@ -1112,7 +1223,7 @@ class AqualinkClient:
         except (KeyError, TypeError):
             result["activity"] = "unknown"
 
-        # Extract other attributes with safe access
+        # === CANISTER, ERROR STATE, TOTAL HOURS ===
         try:
             result["canister"] = robot_data['canister']*100
         except (KeyError, TypeError):
@@ -1128,7 +1239,7 @@ class AqualinkClient:
         except (KeyError, TypeError):
             result["total_hours"] = 0
 
-        # Get stepper information for timing adjustments
+        # === STEPPER (timing adjustments) ===
         try:
             result["stepper"] = robot_data['stepper']
             result["stepper_adj_time"] = robot_data.get('stepperAdjTime', 15)
@@ -1138,25 +1249,56 @@ class AqualinkClient:
             result["stepper_adj_time"] = 15
             _LOGGER.debug("No stepper data found, using defaults")
 
-        # Get current cycle (fan speed) and update it
+        # === CYCLE / FAN SPEED ===
         try:
             current_cycle = robot_data['prCyc']
             result["cycle"] = current_cycle
-            # Map cycle to fan speed (using translation keys)
             cycle_map = {
-                0: "wall_only",           # Wall only
-                1: "floor_only",          # Floor only
-                2: "smart_floor_and_walls", # SMART mode
-                3: "floor_and_walls"      # Floor and walls
+                0: "wall_only",
+                1: "floor_only",
+                2: "smart_floor_and_walls",
+                3: "floor_and_walls"
             }
             self._fan_speed = cycle_map.get(current_cycle, "floor_only")
             result["fan_speed"] = self._fan_speed
         except Exception as e:
             _LOGGER.debug(f"Error setting fan speed for VR robot: {e}")
-            self._fan_speed = "floor_only"  # Default to floor only if we can't determine
+            self._fan_speed = "floor_only"
             result["fan_speed"] = self._fan_speed
 
-        # Convert timestamp to datetime
+        # === ALL CYCLE DURATIONS ===
+        try:
+            durations = robot_data.get('durations', {})
+            result["duration_water"] = durations.get('waterTim', 0)
+            result["duration_quick"] = durations.get('quickTim', 0)
+            result["duration_smart"] = durations.get('smartTim', 0)
+            result["duration_deep"] = durations.get('deepTim', 0)
+            result["duration_custom"] = durations.get('customTim', 0)
+            result["duration_first_smart"] = durations.get('firstSmartTim', 0)
+        except (KeyError, TypeError):
+            pass
+
+        # === WEEKLY SCHEDULE ===
+        try:
+            schedule = robot_data.get('schedule', {})
+            if schedule:
+                enables = schedule.get('Enable', [0]*7)
+                programs = schedule.get('Prt', [0]*7)
+                hours = schedule.get('Hour', [0]*7)
+                minutes = schedule.get('Min', [0]*7)
+                days_of_week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+                cycle_names = {0: "Wall only", 1: "Floor only", 2: "SMART", 3: "Floor+Walls"}
+                for i, day in enumerate(days_of_week):
+                    if i < len(enables):
+                        result[f"schedule_{day}_enabled"] = "On" if enables[i] else "Off"
+                        result[f"schedule_{day}_program"] = cycle_names.get(programs[i] if i < len(programs) else 0, str(programs[i] if i < len(programs) else 0))
+                        h = hours[i] if i < len(hours) else 0
+                        m = minutes[i] if i < len(minutes) else 0
+                        result[f"schedule_{day}_time"] = f"{h:02d}:{m:02d}"
+        except (KeyError, TypeError) as e:
+            _LOGGER.debug(f"Error parsing schedule: {e}")
+
+        # === CYCLE TIMES (start, duration, remaining) ===
         try:
             timestamp = robot_data['cycleStartTime']
             cycle_start_time = datetime.datetime.fromtimestamp(timestamp)
@@ -1174,6 +1316,10 @@ class AqualinkClient:
             result["cycle_duration"] = 0
             result["time_remaining"] = 0
             result["time_remaining_human"] = self._format_time_human(0, 0, 0)
+
+        # === MERGE CACHED TELEMETRY DATA (from real-time WebSocket) ===
+        if hasattr(self, '_telemetry_cache') and self._telemetry_cache:
+            result.update(self._telemetry_cache)
 
     def _update_cyclobat_robot_data(self, data, result):
         """Update status for cyclobat type robot."""
